@@ -16,3 +16,5 @@
     * xcodebuild archive -workspace (打包)
     * xcodebuild  -exportArchive（导出）
 8. 上传到服务器
+
+![效果图](archive.png)
