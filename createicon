@@ -1,0 +1,92 @@
+#!/bin/sh
+
+# 用法 ./process icon.png
+
+# sips -Z 100 100 1.png --out 111.png
+file=$1
+fileProcess=../$1
+width=`sips -g pixelWidth $file | awk '{ print $2}'`
+height=`sips -g pixelHeight $file | awk '{ print $2}'`
+size=$((1024))
+if [[ $size -ne $width && $width -ne $height ]]
+then
+	echo "$file 大小不是1024 * 1024，不满足要求"
+	exit 0
+else
+	process() {
+		appIconDir=.AppIcon.appiconset
+		fileName="AppIcon.appiconset"
+		if [ -e $fileName ]
+		then
+			rm -rf $fileName
+			echo "存在 删除 再创建中..."
+			sleep 0.5
+			echo	
+			mkdir $fileName
+			echo "\033[32m创建目录 $fileName 完成... \033[0m"
+		else 
+			echo "创建中..."
+			echo
+			mkdir $fileName
+			echo "\033[32m创建目录 $fileName 完成... \033[m"
+		fi
+	}
+
+	createPng() {
+		cd $fileName
+		pngAry=(Icon-App-20x20@2x.png 
+				Icon-App-20x20@3x.png 
+				Icon-App-29x29@1x.png 
+				Icon-App-29x29@2x.png 
+				Icon-App-29x29@3x.png 
+				Icon-App-40x40@1x.png 
+				Icon-App-40x40@2x.png 
+				Icon-App-40x40@3x.png
+				Icon-App-57x57@1x.png 
+				Icon-App-57x57@2x.png 
+				Icon-App-60x60@1x.png 
+				Icon-App-60x60@2x.png 
+				Icon-App-60x60@3x.png 
+				Icon-App-76x76@1x.png
+				iTunesArtwork@1x.png)
+		echo { >> Contents.json
+		echo "\"images\":[" >> Contents.json
+
+		for name in ${pngAry[@]}; do
+			
+			search=`echo $name | grep 'iTunesArtwork'`
+			if [ $search ]
+			then
+				size=1024
+				scale=1
+				final=$(($size*$scale))
+				idiom="ios-marketing"
+			else
+				result=`echo $name | cut -d "x" -f 2`
+				size=`echo ${result:0:2}`
+				scale=`echo ${result:(-1)}`
+				final=$(($size*$scale))
+				idiom="iphone"
+			fi
+			
+			echo "{\n\t"\"idiom\":"\"${idiom}\",\n\t"\"size\":"\"${size}x${size}\",\n\t"\"scale\":"\"${scale}x\",\n\t"\"filename\":"\"$name\"\n},">> Contents.json
+			
+			echo "Generate $name ..."
+			
+  		  	cp $fileProcess $name|sips -Z $final $name --out $name > /dev/null 2>&1
+  		  	
+		done
+		echo "]," >> Contents.json
+		echo "\"info\":{
+        "\"version\"":1,
+        "\"author\"":"\"makeappicon\""
+    	}">>Contents.json
+    	echo }>>Contents.json
+		echo "end ..."
+		exit 0
+	}
+	process
+	createPng
+fi
+
+# > /dev/null 2>&1 不显示系统标准信息

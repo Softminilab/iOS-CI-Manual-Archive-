@@ -1,0 +1,109 @@
+#!/bin/sh
+isReplaceImgSource="1"
+if [[ $isReplaceImgSource = "1" ]]; then
+	curl -o icon.png https://www.shapegoapp.com/images/shapego-icon-1024.png
+	# # $? 显示命令最后的退出状态，0表示没有错误
+	if [[ "$?" -eq 0 ]]; then
+		echo "succeful"
+	else
+		exit 0;
+	fi
+
+	iconPackageName="AppIcon.appiconset"
+	cp icon.png icon1.png
+	sh ~/Documents/GitLab/Shell/createicon icon.png
+	rm -rf icon1.png
+
+	if [[ "$?" -eq 0 ]]; then
+		echo "succeful"
+	else
+		exit 0;
+	fi
+fi
+
+# # # 停一会会 不然太快了 😆
+# sleep 2
+
+echo "开始配置app"
+# app显示的名称
+lineAppName="Style版本"
+lineAppPackName="H5DEFAULT002"
+
+# appGit地址的对应的名称
+style="H5STYLE"
+default="H5DEFAULT"
+King="H5KING"
+
+case $lineAppPackName in
+	*$style*) 
+		appPackName=`echo ${lineAppPackName//${style}/"Style"}`
+		finaPackageName=$appPackName
+		 ;;
+	*$default*) 
+		appPackName=`echo ${lineAppPackName//${default}/"Default"}` 
+		finaPackageName=Default003
+		;;
+	*$King*) 
+		appPackName=`echo ${lineAppPackName//${King}/"King"}` 
+		finaPackageName="BorchyKing"
+		;;
+esac
+
+echo "appPackName---> $appPackName"
+echo "finaPackageName---> $finaPackageName"
+
+
+echo "所属Git：iOS group"
+gitUrl="http://xxx/ios/${appPackName}.git"
+echo "git url: $gitUrl"
+if [ -e $appPackName ]; then
+	echo "$appPackName 项目已存在"
+else 
+	git clone $gitUrl
+	if [[ "$?" -eq 0 ]]; then
+		echo "拉取代码到本地成功"
+	else
+		echo "拉取代码错误"
+		exit 0;
+	fi
+fi
+
+if [[ $isReplaceImgSource = "1" ]]; then
+	echo "图片替换"
+	# 替换App icon
+	originIconDir=`find ./${appPackName} -name "Assets.xcassets"`
+	cp -r $iconPackageName $originIconDir
+	if [[ "$?" -eq 0 ]]; then
+		echo "图片替换成功"
+	else
+		echo "图片替换失败"
+		exit 0;
+	fi
+fi
+
+
+# 替换Lunch img
+# Todo
+
+projectDir=`find ./${appPackName} -name "${finaPackageName}.xcworkspace"`
+echo $projectDir
+
+cd $projectDir
+echo $projectDir
+
+echo "目录是：$projectDir"
+
+echo "开始执行 Update pod"
+pod repo update && pod update
+if [[ "$?" -eq 0 ]]; then
+	echo "pod 成功"
+else 
+	echo "pod 失败了"
+	exit 0;
+fi
+
+echo "打包了"
+cd ..
+# pwd
+sh ~$HOME/Documents/GitLab/Shell/createpack $lineAppName
+

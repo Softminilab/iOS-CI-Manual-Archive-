@@ -1,0 +1,129 @@
+# !bin/bash
+ 
+# 需要更改 new_name 字段和 project_name project_name可以使用 xcodebuild -list 获取scheme
+if [[ $1 ]]; then
+	echo  ""
+else 
+	echo  "App name 为空，App name 不能为空"
+fi
+
+SECONDS=0
+originProject_name=`find . -name *.xcodeproj | awk -F "[/.]" '{print $(NF-1)}'`
+# echo $originProject_name
+
+infoPlistDic=./$originProject_name/Info.plist
+# dateTime=`date +%Y%m%d` %H:%M:%S 
+name_prefix=$1
+new_name=${name_prefix}
+# echo $new_name
+
+# echo $infoPlistDic
+
+origin_Name=`/usr/libexec/PlistBuddy -c "Print CFBundleDisplayName" $infoPlistDic`
+version=`/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" $infoPlistDic`
+scheme=`/usr/libexec/PlistBuddy -c "Print RootSchemes" $infoPlistDic`
+CFBundleIdentifier="com.xxx.xx"
+
+sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = .*;/PRODUCT_BUNDLE_IDENTIFIER = com.xxx.xx;/g' ${originProject_name}.xcodeproj/project.pbxproj
+sed -i '' 's/CODE_SIGN_STYLE = .*;/CODE_SIGN_STYLE = Manual;/g' ${originProject_name}.xcodeproj/project.pbxproj
+sed -i '' 's/ProvisioningStyle = .*;/ProvisioningStyle = Manual;/g' ${originProject_name}.xcodeproj/project.pbxproj
+sed -i '' 's/DEVELOPMENT_TEAM = .*;/DEVELOPMENT_TEAM = TeamId;/g' ${originProject_name}.xcodeproj/project.pbxproj
+
+echo "\033[36m ~~~~~~~~~~~~~~~~~~~~~~~"
+echo "\033[36m App name：${new_name}"
+echo "\033[36m App version：${version}"
+echo "\033[36m ~~~~~~~~~~~~~~~~~~~~~~~\n"
+
+if [ -e $infoPlistDic ] ; then
+	/usr/libexec/PlistBuddy -c "set :CFBundleDisplayName ${new_name}" $infoPlistDic
+	/usr/libexec/PlistBuddy -c "set :CFBundleIdentifier ${CFBundleIdentifier}" $infoPlistDic
+	# sed -i '' 's/'${origin_Name}'/'${new_name}'/g' $infoPlistDic
+else
+	exit 0
+fi
+
+project_name=$scheme
+scheme_name=$scheme
+build_configuration="Release"
+archive_name=${new_name}
+
+if [ -d ${archive_name} ] ; then
+rm -rf $archive_name
+fi
+
+mkdir $archive_name
+
+archive_dir=./${archive_name}
+exportPlist=$HOME/Documents/GitLab/Shell/AdHocExportOptionsPlist.plist
+xcarchiveDir=$archive_dir/${new_name}.xcarchive
+codeSign="iPhone Distribution: xxxx xxx (xxxx)"
+# PROVISIONING_PROFILE 可以用 /usr/bin/security cms -D -i 导出结果，后面跟一个 xxx.mobileprovision 文件，通常情况下位于 $HOME/Library/MobileDevice/Provisioning Profiles 目录下
+
+PROVISIONING_PROFILE="xxxx-xxx-xxx-xxx-xxxxx"
+ARCHSType="armv7 arm64"
+teamid="teamId"
+
+
+echo "\033[32m~~~~~~~~~~ 清理项目 ~~~~~~~~~~~~~\n"
+xcodebuild clean -workspace ${project_name}.xcworkspace \
+                 -scheme ${scheme_name} \
+                 -configuration ${build_configuration} > /dev/null 2>&1
+
+echo "\033[32m~~~~~~~~~~ 清理完成 ~~~~~~~~~~~~~\n"
+echo 
+echo "\033[35m~~~~~~~~~~ 打包开始 ~~~~~~~~~~~~~ \n"
+echo
+
+# IDEBuildOperationMaxNumberOfConcurrentCompileTasks 从字面意思就知道啥意思
+# 因为我们的项目中，是有两层，基层是一个pod构成的私有项目，上层继承底层的控件以及页面
+# 所以在编译是如果不指定，xcodebuild complie 可能同时找到两个名字一样的文件（一个位于pod中，一个位于正在的项目中），会造成打包不通过
+# 如果指定，就是会造成 complie速度慢一点，但是会抱着在 complie 过程不会出现问题
+xcodebuild archive -workspace ${project_name}.xcworkspace \
+-scheme ${scheme_name} \
+-configuration ${build_configuration} \
+-archivePath ${xcarchiveDir} \
+CODE_SIGN_IDENTITY="${codeSign}" \
+PROVISIONING_PROFILE="${PROVISIONING_PROFILE}" \
+-IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
+-allowProvisioningUpdates > /dev/null 2>&1
+
+if [ -d "$xcarchiveDir" ] ; then
+echo 
+echo "\033[32m~~~~~~~~~~ 打包成功 🎉 🎉 🎉 🎉 🎉 ~~~~~~~~~~~~~\n"
+else
+echo 
+echo "\033[31m~~~~~~~~~~ 打包失败 ~~~~~~~~~~~~~\n"
+exit 0
+echo 
+fi
+
+# xcodebuild -exportArchive -archivePath <xcarchivepath> -exportPath <destinationpath> -exportOptionsPlist <plistpath>
+
+echo "\033[35m~~~~~~~~~~ 导成 ipa ~~~~~~~~~~~~~\n"
+xcodebuild  -exportArchive \
+            -archivePath ${xcarchiveDir} \
+            -exportPath ${archive_dir} \
+            -exportOptionsPlist ${exportPlist} \
+            -allowProvisioningUpdates > /dev/null 2>&1
+
+path=${archive_name}/${scheme_name}.ipa
+replacepath=${archive_name}/${new_name}.ipa
+
+if [ -f $path ] ; then
+mv $path $replacepath
+echo "\033[32m~~~~~~~~~~ 导成ipa成功 ~~~~~~~~~~~~~\n"
+else 
+echo "\033[31m~~~~~~~~~~ 导成ipa失败 ~~~~~~~~~~~~~\n"
+exit 0
+fi 
+echo "\033[36;1m打包总用时: ${SECONDS}s \033[0m"
+
+
+echo "\033[32m~~~~~~~~~~ 上传服务器 ~~~~~~~~~~~~~\n"
+FILE=${archive_name}/${new_name}.ipa
+HOST='xxx.xxx.xxx.xxx'
+USER='sftpuser'
+PASSWD='123456'
+REMOTE="/upload/"
+
+lftp sftp://$USER:$PASSWD@$HOST  -e "cd ${REMOTE}; put ${FILE} ;bye"
